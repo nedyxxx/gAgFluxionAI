@@ -11,8 +11,8 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Main Frame
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 360, 0, 300)
-mainFrame.Position = UDim2.new(0.5, -180, 0.5, -150)
+mainFrame.Size = UDim2.new(0, 360, 0, 340)
+mainFrame.Position = UDim2.new(0.5, -180, 0.5, -170)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -75,7 +75,7 @@ local minimized = false
 minimizeBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	buttonHolder.Visible = not minimized
-	mainFrame.Size = minimized and UDim2.new(0, 360, 0, 60) or UDim2.new(0, 360, 0, 300)
+	mainFrame.Size = minimized and UDim2.new(0, 360, 0, 60) or UDim2.new(0, 360, 0, 340)
 end)
 
 -- Toggle UI with RightShift
@@ -109,7 +109,7 @@ mainFrame.InputChanged:Connect(function(input)
 	end
 end)
 
--- Button Creation
+-- Button Creation Function
 local function createButton(name, url)
 	local button = Instance.new("TextButton")
 	button.Size = UDim2.new(1, 0, 0, 40)
@@ -128,8 +128,9 @@ local function createButton(name, url)
 	end)
 end
 
--- Feature Buttons
+-- ✅ Feature Buttons (with your updated links)
 createButton("Dark Spawner", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/darkspawner")
 createButton("Pet Mutation Finder", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/petmutation")
 createButton("SpeedhubX", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/speedhub")
 createButton("Project Reverse", "https://raw.githubusercontent.com/veryimportantrr/x/refs/heads/main/gag_visual.lua")
+createButton("Egg Randomizer", "https://raw.githubusercontent.com/sigbinhub/pet-changer-beta/refs/heads/main/loader.lua")
