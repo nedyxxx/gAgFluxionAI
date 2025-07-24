@@ -134,3 +134,4 @@ createButton("Pet Mutation Finder", "https://raw.githubusercontent.com/nedyxxx/g
 createButton("SpeedhubX", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/speedhub")
 createButton("Project Reverse", "https://raw.githubusercontent.com/veryimportantrr/x/refs/heads/main/gag_visual.lua")
 createButton("Egg Randomizer", "https://raw.githubusercontent.com/sigbinhub/pet-changer-beta/refs/heads/main/loader.lua")
+createButton("Pet Leveler", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/petleveler")
