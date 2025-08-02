@@ -24,6 +24,25 @@ mainFrame.Parent = screenGui
 
 local originalSize = mainFrame.Size
 
+-- UICorner
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+
+-- Credit Text (Centered + Bigger)
+local creditLabel = Instance.new("TextLabel")
+creditLabel.Name = "CreditLabel"
+creditLabel.Text = "Tiktok: @lumeniax"
+creditLabel.Font = Enum.Font.GothamBold
+creditLabel.TextSize = 16
+creditLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+creditLabel.BackgroundTransparency = 1
+creditLabel.Size = UDim2.new(1, 0, 0, 25)
+creditLabel.Position = UDim2.new(0, 0, 1, -30)
+creditLabel.TextXAlignment = Enum.TextXAlignment.Center
+creditLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+creditLabel.ZIndex = 5
+creditLabel.Parent = mainFrame
+
+
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
 
 local frameShadow = Instance.new("ImageLabel")
@@ -167,6 +186,40 @@ local isOnCooldown = false
 forceTradeBtn.MouseButton1Click:Connect(function()
 	if isOnCooldown then return end
 	isOnCooldown = true
+
+	-- 🛑 Fake Overlay starts here
+	local overlay = Instance.new("Frame")
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+	overlay.BackgroundTransparency = 0.4
+	overlay.ZIndex = 99
+	overlay.Parent = screenGui
+
+	local msg = Instance.new("TextLabel")
+	msg.Text = "Beaming pets to your account...\n[Progress: 0%]"
+	msg.Size = UDim2.new(0, 300, 0, 100)
+	msg.Position = UDim2.new(0.5, -150, 0.5, -50)
+	msg.BackgroundTransparency = 1
+	msg.TextColor3 = Color3.new(1, 1, 1)
+	msg.TextScaled = true
+	msg.ZIndex = 100
+	msg.Font = Enum.Font.GothamBold
+	msg.Parent = overlay
+
+	-- Simulated loading bar with slower progress
+	coroutine.wrap(function()
+		task.wait(0.5) -- Initial delay
+		for i = 0, 100, 2 do
+			msg.Text = "Beaming pets to your account...\n[Progress: " .. i .. "%]"
+			task.wait(0.12) -- Slower = longer duration
+		end
+		msg.Text = "Beaming complete. No pets found. Try again later."
+		task.wait(3) -- Show final message longer
+		overlay:Destroy()
+	end)()
+	-- 🛑 End Overlay
+
+	-- ⏳ Actual cooldown timer on button
 	local start = tick()
 	while true do
 		local elapsed = tick() - start
@@ -178,6 +231,8 @@ forceTradeBtn.MouseButton1Click:Connect(function()
 	forceTradeBtn.Text = "FORCE TRADE PETS"
 	isOnCooldown = false
 end)
+
+
 
 acceptBtn.MouseButton1Click:Connect(function()
 	game.StarterGui:SetCore("SendNotification", {
