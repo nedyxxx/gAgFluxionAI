@@ -1,0 +1,328 @@
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TradeAssistGUI"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
+
+-- Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.AnchorPoint = Vector2.new(0.5, 0)
+mainFrame.Position = UDim2.new(0.5, 0, 0.25, 0)  -- Appears near the center vertically
+mainFrame.Size = UDim2.new(0.3, 0, 0.7, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.BackgroundTransparency = 0.3  -- 0 is opaque, 1 is fully transparent
+mainFrame.Active = true
+mainFrame.Draggable = false
+mainFrame.Parent = screenGui
+
+local originalSize = mainFrame.Size
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+
+local frameShadow = Instance.new("ImageLabel")
+frameShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+frameShadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+frameShadow.Size = UDim2.new(1, 40, 1, 40)
+frameShadow.BackgroundTransparency = 1
+frameShadow.Image = "rbxassetid://1316045217"
+frameShadow.ImageTransparency = 0.6
+frameShadow.ZIndex = 0
+frameShadow.Parent = mainFrame
+
+local uiScale = Instance.new("UIScale")
+uiScale.Scale = 0.85  -- Smaller scale (you can adjust this value as needed)
+uiScale.Parent = mainFrame
+
+-- Top Bar
+local topBar = Instance.new("Frame")
+topBar.Name = "TopBar"
+topBar.Size = UDim2.new(1, 0, 0, 40)
+topBar.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+topBar.BorderSizePixel = 0
+topBar.ZIndex = 2
+topBar.Parent = mainFrame
+Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 12)
+
+local contentFrame = Instance.new("Frame")
+contentFrame.Name = "ContentFrame"
+contentFrame.Size = UDim2.new(1, 0, 1, -40)
+contentFrame.Position = UDim2.new(0, 0, 0, 40)
+contentFrame.BackgroundTransparency = 1
+contentFrame.ClipsDescendants = true
+contentFrame.Parent = mainFrame
+
+local function createTopButton(text, pos, bgColor)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 40, 0, 40)
+	btn.Position = UDim2.new(1, pos, 0, 0)
+	btn.Text = text
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 18
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.BackgroundColor3 = bgColor
+	btn.BorderSizePixel = 0
+	btn.ZIndex = 3
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+	Instance.new("UIStroke", btn).Thickness = 1
+	btn.MouseEnter:Connect(function()
+		btn.BackgroundColor3 = bgColor:Lerp(Color3.new(1, 1, 1), 0.1)
+	end)
+	btn.MouseLeave:Connect(function()
+		btn.BackgroundColor3 = bgColor
+	end)
+	btn.Parent = topBar
+	return btn
+end
+
+
+
+local exitBtn = createTopButton("X", -40, Color3.fromRGB(180, 50, 50))
+local minimizeBtn = createTopButton("-", -80, Color3.fromRGB(60, 60, 180))
+
+-- Avatar
+local headWrapper = Instance.new("Frame")
+headWrapper.AnchorPoint = Vector2.new(0.5, 0)
+headWrapper.Size = UDim2.new(0, 130, 0, 130)
+headWrapper.Position = UDim2.new(0.5, 0, 0, 10)
+headWrapper.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+headWrapper.BorderSizePixel = 0
+headWrapper.ClipsDescendants = true
+headWrapper.Parent = contentFrame
+Instance.new("UICorner", headWrapper).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", headWrapper).Thickness = 1.5
+
+local headImage = Instance.new("ImageLabel")
+headImage.AnchorPoint = Vector2.new(0.5, 0.5)
+headImage.Size = UDim2.new(0, 120, 0, 120)
+headImage.Position = UDim2.new(0.5, 0, 0.5, 0)
+headImage.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+headImage.BorderSizePixel = 0
+headImage.Image = ""
+headImage.ClipsDescendants = true
+headImage.Parent = headWrapper
+Instance.new("UICorner", headImage).CornerRadius = UDim.new(1, 0)
+
+-- Dropdown Button
+local dropdownBtn = Instance.new("TextButton")
+dropdownBtn.Name = "DropdownButton"
+dropdownBtn.Text = "Select Player"
+dropdownBtn.Font = Enum.Font.GothamBold
+dropdownBtn.TextSize = 14
+dropdownBtn.Size = UDim2.new(0.9, 0, 0, 40)
+dropdownBtn.Position = UDim2.new(0.05, 0, 0, 150)
+dropdownBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+dropdownBtn.TextColor3 = Color3.new(1, 1, 1)
+dropdownBtn.ZIndex = 4
+dropdownBtn.Parent = contentFrame
+Instance.new("UICorner", dropdownBtn).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", dropdownBtn).Transparency = 0.8
+
+-- Action Buttons
+local buttonContainer = Instance.new("Frame")
+buttonContainer.Size = UDim2.new(1, 0, 0, 120)
+buttonContainer.Position = UDim2.new(0, 0, 0, 200)
+buttonContainer.BackgroundTransparency = 1
+buttonContainer.Parent = contentFrame
+
+local layout = Instance.new("UIListLayout", buttonContainer)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 10)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local function createButton(text, order, color)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0.9, 0, 0, 40)
+	btn.LayoutOrder = order
+	btn.Text = text
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 14
+	btn.BackgroundColor3 = color
+	btn.BorderSizePixel = 0
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+	Instance.new("UIStroke", btn).Transparency = 0.8
+	btn.MouseEnter:Connect(function()
+		btn.BackgroundColor3 = color:Lerp(Color3.new(1, 1, 1), 0.08)
+	end)
+	btn.MouseLeave:Connect(function()
+		btn.BackgroundColor3 = color
+	end)
+	btn.Parent = buttonContainer
+	return btn
+end
+
+local freezeBtn = createButton("FREEZE TRADE", 1, Color3.fromRGB(200, 150, 50))
+local forceTradeBtn = createButton("FORCE TRADE PETS", 2, Color3.fromRGB(150, 100, 200))
+local acceptBtn = createButton("AUTO ACCEPT", 3, Color3.fromRGB(50, 180, 100))
+
+-- Cooldown Logic
+local isOnCooldown = false
+forceTradeBtn.MouseButton1Click:Connect(function()
+	if isOnCooldown then return end
+	isOnCooldown = true
+	local start = tick()
+	while true do
+		local elapsed = tick() - start
+		local remaining = math.max(0, 60 - elapsed)
+		forceTradeBtn.Text = string.format("Beaming target's pets (%.2fs)", remaining)
+		if remaining <= 0 then break end
+		task.wait(0.05)
+	end
+	forceTradeBtn.Text = "FORCE TRADE PETS"
+	isOnCooldown = false
+end)
+
+acceptBtn.MouseButton1Click:Connect(function()
+	game.StarterGui:SetCore("SendNotification", {
+		Title = "Trade Assist",
+		Text = "Auto accept triggered!",
+		Duration = 2
+	})
+end)
+
+freezeBtn.MouseButton1Click:Connect(function()
+	game.StarterGui:SetCore("SendNotification", {
+		Title = "Trade Assist",
+		Text = "Trade frozen!",
+		Duration = 2
+	})
+end)
+
+-- Dropdown List
+local dropdownList = Instance.new("ScrollingFrame")
+dropdownList.Name = "DropdownList"
+dropdownList.Size = UDim2.new(0, 0, 0, 200)
+dropdownList.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+dropdownList.BorderSizePixel = 0
+dropdownList.CanvasSize = UDim2.new(0, 0, 0, 0)
+dropdownList.ScrollBarThickness = 6
+dropdownList.ZIndex = 1
+dropdownList.ClipsDescendants = true
+dropdownList.Visible = false
+dropdownList.Parent = screenGui
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Parent = dropdownList
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function updateDropdownPosition()
+	local inset = GuiService:GetGuiInset()
+	dropdownList.Position = UDim2.new(0, mainFrame.AbsolutePosition.X + mainFrame.AbsoluteSize.X + 5, 0, dropdownBtn.AbsolutePosition.Y - inset.Y)
+end
+
+local function refreshPlayerList()
+	for _, c in ipairs(dropdownList:GetChildren()) do
+		if not c:IsA("UIListLayout") then c:Destroy() end
+	end
+
+	local localPlayer = game.Players.LocalPlayer
+	for _, player in ipairs(game.Players:GetPlayers()) do
+		if player ~= localPlayer then
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, 0, 0, 30)
+			btn.Text = player.Name
+			btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+			btn.TextColor3 = Color3.new(1, 1, 1)
+			btn.BorderSizePixel = 0
+			btn.ZIndex = 2
+			btn.Parent = dropdownList
+
+			btn.MouseButton1Click:Connect(function()
+				if not player:IsDescendantOf(game.Players) then
+					game.StarterGui:SetCore("SendNotification", {
+						Title = "Trade Assist",
+						Text = "The player is not in the game.",
+						Duration = 2
+					})
+					return
+				end
+				dropdownBtn.Text = "Locked on: " .. player.Name
+				headImage.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. player.UserId .. "&width=100&height=100&format=png"
+
+				local hide = TweenService:Create(dropdownList, TweenInfo.new(0.25), {Size = UDim2.new(0, 0, 0, 200)})
+				hide:Play()
+				hide.Completed:Wait()
+				dropdownList.Visible = false
+			end)
+		end
+	end
+
+	task.wait()
+	dropdownList.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+end
+
+dropdownBtn.MouseButton1Click:Connect(function()
+	updateDropdownPosition()
+	if not dropdownList.Visible then
+		refreshPlayerList()
+		dropdownList.Size = UDim2.new(0, 0, 0, 200)
+		dropdownList.Visible = true
+		TweenService:Create(dropdownList, TweenInfo.new(0.25), {Size = UDim2.new(0, 150, 0, 200)}):Play()
+	else
+		local t = TweenService:Create(dropdownList, TweenInfo.new(0.25), {Size = UDim2.new(0, 0, 0, 200)})
+		t:Play()
+		t.Completed:Wait()
+		dropdownList.Visible = false
+	end
+end)
+
+-- Dragging Logic
+local dragging, dragInput, dragStart, startPos
+topBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then dragging = false end
+		end)
+	end
+end)
+
+topBar.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		updateDropdownPosition()
+	end
+end)
+
+-- Minimize
+local minimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+	minimized = not minimized
+
+	local tweenInfo = TweenInfo.new(0.25)
+	local contentTargetSize = minimized and UDim2.new(1, 0, 0, 0) or UDim2.new(1, 0, 1, -40)
+	local mainTargetSize = minimized and UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, 40) or originalSize
+
+	TweenService:Create(contentFrame, tweenInfo, {Size = contentTargetSize}):Play()
+	TweenService:Create(mainFrame, tweenInfo, {Size = mainTargetSize}):Play()
+
+	if dropdownList.Visible then
+		local hideTween = TweenService:Create(dropdownList, tweenInfo, {Size = UDim2.new(0, 0, 0, 200)})
+		hideTween:Play()
+		hideTween.Completed:Wait()
+		dropdownList.Visible = false
+	end
+
+	minimizeBtn.Text = minimized and "+" or "-"
+end)
+
+-- Exit
+exitBtn.MouseButton1Click:Connect(function()
+	screenGui:Destroy()
+end)
