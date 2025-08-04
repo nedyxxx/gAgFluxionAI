@@ -277,7 +277,7 @@ createButton("Project Reverse (KEYLESS)", "https://raw.githubusercontent.com/ver
 createButton("Auto Trade Freeze", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/trade")
 createButton("Dark Spawner", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/darkspawner")
 createButton("Pet Mutation Finder", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/petmutation")
-createButton("Egg Randomizer", "https://raw.githubusercontent.com/sigbinhub/pet-changer-beta/refs/heads/main/loader.lua")
+createButton("Egg Randomizer", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/eggrandomizer")
 createButton("Pet Leveler", "https://raw.githubusercontent.com/nedyxxx/gAgFluxionAI/refs/heads/main/petleveler")
 
 -- Footer Label
